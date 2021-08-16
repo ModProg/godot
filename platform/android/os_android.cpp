@@ -559,7 +559,7 @@ void OS_Android::process_hover(int p_type, Point2 p_pos) {
 	}
 }
 
-void OS_Android::process_mouse_event(int event_action, int event_android_buttons_mask, Point2 event_pos, float event_vertical_factor, float event_horizontal_factor) {
+void OS_Android::process_mouse_event(int event_action, int event_android_buttons_mask, Point2 event_pos, float event_vertical_factor, float event_horizontal_factor, float pressure) {
 	int event_buttons_mask = _android_button_mask_to_godot_button_mask(event_android_buttons_mask);
 	switch (event_action) {
 		case AMOTION_EVENT_ACTION_BUTTON_PRESS:
@@ -587,6 +587,7 @@ void OS_Android::process_mouse_event(int event_action, int event_android_buttons
 			ev->set_global_position(event_pos);
 			ev->set_relative(event_pos - hover_prev_pos);
 			ev->set_button_mask(event_buttons_mask);
+      ev->set_pressure(pressure);
 			input->parse_input_event(ev);
 			hover_prev_pos = event_pos;
 		} break;

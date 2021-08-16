@@ -59,6 +59,13 @@ import java.util.Set;
  */
 public class GodotInputHandler implements InputDeviceListener {
 
+	// Samsung specific S-PEN secondary button
+	// https://github.com/Samsung/ChromiumGStreamerBackend/blob/820d17430deb0ba8ccef63d00d81a374f8239c4b/content/public/android/java/src/org/chromium/content/browser/SPenSupport.java#L17-L21
+	private static final int SPEN_ACTION_DOWN = 211;
+	private static final int SPEN_ACTION_UP = 212;
+	private static final int SPEN_ACTION_MOVE = 213;
+	private static final int SPEN_ACTION_CANCEL = 214;
+
 	private final String tag = this.getClass().getSimpleName();
 
 	private final SparseIntArray mJoystickIds = new SparseIntArray(4);
@@ -169,13 +176,17 @@ public class GodotInputHandler implements InputDeviceListener {
 
 	public boolean onTouchEvent(final MotionEvent event) {
 		// Mouse drag (mouse pressed and move) doesn't fire onGenericMotionEvent so this is needed
-		if (event.isFromSource(InputDevice.SOURCE_MOUSE) || event.isFromSource(InputDevice.SOURCE_STYLUS)) {
+		if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
 			if (event.getAction() != MotionEvent.ACTION_MOVE) {
 				// we return true because every time a mouse event is fired, the event is already handled
 				// in onGenericMotionEvent, so by touch event we can say that the event is also handled
 				return true;
 			}
 			return handleMouseEvent(event);
+		}
+		
+		if (event.isFromSource(InputDevice.SOURCE_STYLUS)) {
+			return handleStylusEvent(event);
 		}
 
 		final int evcount = event.getPointerCount();
@@ -258,17 +269,6 @@ public class GodotInputHandler implements InputDeviceListener {
 				}
 				return true;
 			}
-		} else if (event.isFromSource(InputDevice.SOURCE_STYLUS)) {
-			final float x = event.getX();
-			final float y = event.getY();
-			final int type = event.getAction();
-			queueEvent(new Runnable() {
-				@Override
-				public void run() {
-					GodotLib.hover(type, x, y);
-				}
-			});
-			return true;
 		} else if ((event.isFromSource(InputDevice.SOURCE_MOUSE))) {
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 				return handleMouseEvent(event);
@@ -507,8 +507,72 @@ public class GodotInputHandler implements InputDeviceListener {
 						GodotLib.touch(event.getSource(), action, 0, 1, new float[] { 0, x, y }, buttonsMask, verticalFactor, horizontalFactor);
 					}
 				});
+				break;
+			}
+			default: {
+				Log.w(tag, "Unknown Mouse Event: " + MotionEvent.actionToString(event.getAction()));
 			}
 		}
 		return false;
+	}
+
+	private boolean handleStylusEvent(final MotionEvent event) {
+		switch (event.getActionMasked()) {
+			case SPEN_ACTION_DOWN:
+			case SPEN_ACTION_UP:
+			case SPEN_ACTION_MOVE:
+			case MotionEvent.ACTION_DOWN:
+			case MotionEvent.ACTION_UP:
+			case MotionEvent.ACTION_BUTTON_PRESS:
+			case MotionEvent.ACTION_BUTTON_RELEASE:
+			case MotionEvent.ACTION_MOVE: {
+				final float x = event.getX();
+				final float y = event.getY();
+				final float pressure = event.getPressure();
+
+				int buttonsMask = event.getButtonState();
+				switch (buttonsMask) {
+					case 0:
+						buttonsMask = MotionEvent.BUTTON_PRIMARY;
+						break;
+					case MotionEvent.BUTTON_STYLUS_PRIMARY:
+						buttonsMask = MotionEvent.BUTTON_SECONDARY;
+						break;
+					case MotionEvent.BUTTON_STYLUS_SECONDARY:
+						buttonsMask = MotionEvent.BUTTON_TERTIARY;
+						break;
+				}
+
+				int action = event.getAction();
+				switch (action) {
+					case SPEN_ACTION_DOWN:
+					case MotionEvent.ACTION_DOWN:
+						action = MotionEvent.ACTION_BUTTON_PRESS;
+						break;
+					case SPEN_ACTION_UP:
+					case MotionEvent.ACTION_UP:
+						action = MotionEvent.ACTION_BUTTON_RELEASE;
+						buttonsMask = 0;
+						break;
+					case SPEN_ACTION_MOVE:
+						action = MotionEvent.ACTION_MOVE;
+						break;
+				}
+
+				final int mappedAction = action;
+				final int mappedButtonsMask = buttonsMask;
+
+				queueEvent(new Runnable() {
+					@Override
+					public void run() {
+						GodotLib.touch(event.getSource(), mappedAction, 0, 1, new float[] { 0, x, y }, mappedButtonsMask, pressure);
+					}
+				});
+				return true;
+			}
+			default: {
+				return handleMouseEvent(event);
+			}
+		}
 	}
 }
